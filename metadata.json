@@ -1,0 +1,7 @@
+{
+  "name": "Aloka Fotsy - Aviator Prediction - Version 11.0 Quantum Core - Mahandry",
+  "description": "Moteur prédictif ultra-performant propulsé par l'IA Quantum Neural, optimisé pour 2025. Analyses SHA-512 en temps réel et reconnaissance de patterns avancée.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

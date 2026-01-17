@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi Timezone Digital Clock</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card:#0f1724;
+      --accent:#06b6d4;
+      --muted:#94a3b8;
+      --glass: rgba(255,255,255,0.04);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+    body{background:linear-gradient(180deg,#071023 0%, #07142a 100%);color:#e6eef6;display:flex;align-items:center;justify-content:center;padding:24px;}
+    .app{width:100%;max-width:980px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    select,input[type="text"]{padding:8px 10px;border-radius:10px;border:1px solid var(--glass);background:transparent;color:inherit;outline:none}
+    button{background:var(--accent);color:#032022;border:none;padding:9px 12px;border-radius:10px;font-weight:700;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid var(--glass);color:var(--muted);padding:8px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:14px;border:1px solid var(--glass);box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+    .tz-name{font-weight:800;letter-spacing:0.02em}
+    .time{font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;font-size:28px;margin-top:6px}
+    .date{color:var(--muted);font-size:12px;margin-top:6px}
+    .actions{display:flex;gap:8px;margin-top:10px}
+    .remove{background:#ff6b6b;color:white;padding:6px;border-radius:8px;border:none;cursor:pointer}
+    .small{font-size:12px;color:var(--muted)}
+    footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+    .search{min-width:260px}
+    @media (max-width:520px){
+      .controls{flex-direction:column;align-items:stretch}
+      .search{min-width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Multi Timezone Clock">
+    <header>
+      <h1>Digital Clocks — Multiple Time Zones</h1>
+      <div class="controls">
+        <select id="presetSelect" title="Choose a preset timezone">
+          <option value="">— Presets —</option>
+        </select>
+        <input id="customZone" class="search" placeholder="Enter IANA timezone (e.g. Europe/Paris)" aria-label="Custom timezone">
+        <button id="addBtn">Add</button>
+        <button id="toggle12" class="ghost" title="Toggle 12/24 hour">24h</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="clockGrid" class="grid" aria-live="polite"></div>
+      <footer>
+        Tip: use valid IANA timezone names (e.g. "America/New_York", "Asia/Tokyo"). If unsure, try presets.
+      </footer>
+    </main>
+  </div>
+
+<script>
+/*
+  Multi timezone digital clock (standalone).
+  - Uses Intl.DateTimeFormat with timeZone.
+  - Validate timezone by trying Date.toLocaleString with the timeZone option.
+*/
+(function(){
+  const presets = [
+    "UTC","Europe/London","Europe/Paris","Europe/Berlin","America/New_York",
+    "America/Chicago","America/Denver","America/Los_Angeles","America/Sao_Paulo",
+    "Asia/Tokyo","Asia/Seoul","Asia/Shanghai","Asia/Kolkata","Asia/Dubai",
+    "Australia/Sydney","Pacific/Auckland","Africa/Johannesburg","Africa/Cairo"
+  ];
+
+  const grid = document.getElementById('clockGrid');
+  const presetSelect = document.getElementById('presetSelect');
+  const customInput = document.getElementById('customZone');
+  const addBtn = document.getElementById('addBtn');
+  const toggleBtn = document.getElementById('toggle12');
+
+  let use24 = true;
+  let zones = ["UTC","Europe/Paris","America/New_York"]; // initial
+
+  // populate presets dropdown
+  presets.forEach(z => {
+    const opt = document.createElement('option');
+    opt.value = z;
+    opt.textContent = z;
+    presetSelect.appendChild(opt);
+  });
+
+  presetSelect.addEventListener('change', () => {
+    if (presetSelect.value) {
+      customInput.value = presetSelect.value;
+    }
+  });
+
+  addBtn.addEventListener('click', () => {
+    const z = customInput.value.trim();
+    if (!z) return;
+    if (zones.includes(z)) { alert('Already added'); return; }
+    if (!isValidIana(z)) { alert('Invalid or unknown timezone'); return; }
+    zones.push(z);
+    customInput.value = '';
+    renderClocks();
+  });
+
+  toggleBtn.addEventListener('click', () => {
+    use24 = !use24;
+    toggleBtn.textContent = use24 ? '24h' : '12h';
+    renderClocks();
+  });
+
+  function isValidIana(zone) {
+    try {
+      // will throw RangeError for invalid zone in some engines
+      const fmt = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: '2-digit' });
+      fmt.format(new Date());
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function formatDateForZone(date, zone) {
+    const options = {
+      timeZone: zone,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: !use24
+    };
+    const time = date.toLocaleTimeString('en-US', options);
+    const dateStr = date.toLocaleDateString(undefined, { timeZone: zone, weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    // Also compute offset
+    const offsetMinutes = -Math.round((date.getTime() - new Date(date.toLocaleString('en-US', {timeZone: zone})).getTime())/60000);
+    // The above computation uses locale string trick to build a date in that zone; modern browsers vary — show only if number is finite
+    const offsetHr = isFinite(offsetMinutes) ? (offsetMinutes >= 0 ? `UTC+${(offsetMinutes/60).toFixed(2)}` : `UTC${(offsetMinutes/60).toFixed(2)}`) : '';
+    return { time, dateStr, offsetHr };
+  }
+
+  function removeZone(zone) {
+    zones = zones.filter(z => z !== zone);
+    renderClocks();
+  }
+
+  function createCard(zone) {
+    const card = document.createElement('section');
+    card.className = 'card';
+    card.setAttribute('role','region');
+    card.setAttribute('aria-label', `Clock for ${zone}`);
+
+    const title = document.createElement('div');
+    title.className = 'tz-name';
+    title.textContent = zone;
+
+    const timeEl = document.createElement('div');
+    timeEl.className = 'time';
+    timeEl.textContent = '';
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'date';
+    dateEl.textContent = '';
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove';
+    removeBtn.textContent = 'Remove';
+    removeBtn.addEventListener('click', () => removeZone(zone));
+
+    const small = document.createElement('div');
+    small.className = 'small';
+    small.textContent = '';
+
+    actions.appendChild(removeBtn);
+    actions.appendChild(small);
+
+    card.appendChild(title);
+    card.appendChild(timeEl);
+    card.appendChild(dateEl);
+    card.appendChild(actions);
+
+    return { card, timeEl, dateEl, small };
+  }
+
+  let rendered = {};
+  function renderClocks() {
+    // keep existing cards for performance
+    const existing = {...rendered};
+    rendered = {};
+    zones.forEach(zone => {
+      let entry = existing[zone];
+      if (!entry) {
+        entry = createCard(zone);
+        grid.appendChild(entry.card);
+      }
+      rendered[zone] = entry;
+    });
+    // remove dom nodes for zones that were removed
+    Object.keys(existing).forEach(zone => {
+      if (!rendered[zone]) {
+        grid.removeChild(existing[zone].card);
+      }
+    });
+    // initial update
+    updateAll();
+  }
+
+  function updateAll() {
+    const now = new Date();
+    Object.entries(rendered).forEach(([zone, entry]) => {
+      try {
+        const { time, dateStr, offsetHr } = formatDateForZone(now, zone);
+        entry.timeEl.textContent = time;
+        entry.dateEl.textContent = dateStr;
+        entry.small.textContent = offsetHr;
+      } catch (e) {
+        entry.timeEl.textContent = '—';
+        entry.dateEl.textContent = 'Invalid timezone';
+        entry.small.textContent = '';
+      }
+    });
+  }
+
+  // Initial render
+  renderClocks();
+
+  // start interval
+  setInterval(updateAll, 1000);
+
+  // add ability to add presets by double clicking select
+  presetSelect.addEventListener('dblclick', () => {
+    if (presetSelect.value) {
+      customInput.value = presetSelect.value;
+    }
+  });
+
+  // keyboard enter on input adds
+  customInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addBtn.click();
+  });
+})();
+</script>
+</body>
+</html>
